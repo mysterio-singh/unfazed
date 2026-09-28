@@ -66,7 +66,7 @@ function AppRoutes() {
   }
 />
 <Route
-  path="/book/:slug"
+  path="/booking/:slug"
   element={<BookingPage />}
 />
 

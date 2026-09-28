@@ -393,10 +393,14 @@ const handleRazorpayWebhook = async (req, res, next) => {
   try {
     const crypto = require("crypto");
 
+    console.log("🔔 Razorpay webhook received");
+
     const webhookSignature =
       req.headers["x-razorpay-signature"];
 
     if (!webhookSignature) {
+      console.log("❌ Webhook signature missing");
+
       return res.status(400).json({
         success: false,
         message: "Webhook signature missing",
@@ -412,13 +416,19 @@ const handleRazorpayWebhook = async (req, res, next) => {
       .digest("hex");
 
     if (generatedSignature !== webhookSignature) {
+      console.log("❌ Invalid webhook signature");
+
       return res.status(400).json({
         success: false,
         message: "Invalid webhook signature",
       });
     }
 
+    console.log("✅ Webhook signature verified");
+
     const event = JSON.parse(req.body.toString());
+
+    console.log("📩 Razorpay event:", event.event);
 
     if (event.event === "payment.captured") {
       const paymentEntity =
@@ -430,11 +440,17 @@ const handleRazorpayWebhook = async (req, res, next) => {
       const razorpayPaymentId =
         paymentEntity.id;
 
+      console.log("💰 Payment captured");
+      console.log("Order ID:", razorpayOrderId);
+      console.log("Payment ID:", razorpayPaymentId);
+
       const payment = await Payment.findOne({
         gateway_order_id: razorpayOrderId,
       });
 
       if (!payment) {
+        console.log("❌ Payment record not found");
+
         return res.status(404).json({
           success: false,
           message: "Payment record not found",
@@ -448,6 +464,8 @@ const handleRazorpayWebhook = async (req, res, next) => {
         payment.status = "paid";
 
         await payment.save();
+
+        console.log("✅ Payment marked as PAID");
       }
 
       if (payment.session) {
@@ -457,6 +475,8 @@ const handleRazorpayWebhook = async (req, res, next) => {
             status: "confirmed",
           }
         );
+
+        console.log("✅ Session marked as CONFIRMED");
       }
     }
 
@@ -467,13 +487,19 @@ const handleRazorpayWebhook = async (req, res, next) => {
       const razorpayOrderId =
         paymentEntity.order_id;
 
+      console.log("❌ Payment failed");
+      console.log("Order ID:", razorpayOrderId);
+
       const payment = await Payment.findOne({
         gateway_order_id: razorpayOrderId,
       });
 
       if (payment) {
         payment.status = "failed";
+
         await payment.save();
+
+        console.log("⚠️ Payment marked as FAILED");
 
         if (payment.session) {
           await Session.findByIdAndUpdate(
@@ -482,15 +508,20 @@ const handleRazorpayWebhook = async (req, res, next) => {
               status: "cancelled",
             }
           );
+
+          console.log("⚠️ Session marked as CANCELLED");
         }
       }
     }
+
+    console.log("✅ Webhook processed successfully");
 
     return res.status(200).json({
       success: true,
       message: "Webhook processed successfully",
     });
   } catch (error) {
+    console.log("❌ Webhook processing error:", error);
     next(error);
   }
 };

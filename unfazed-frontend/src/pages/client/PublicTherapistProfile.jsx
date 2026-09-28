@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
 
 function PublicTherapistProfile() {
   const { slug } = useParams();
+  const navigate = useNavigate();
 
   const [therapist, setTherapist] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -166,6 +167,7 @@ function PublicTherapistProfile() {
 
             <button
               type="button"
+              onClick={() => navigate(`/booking/${slug}`)}
               className="mt-10 w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold transition hover:bg-indigo-500"
             >
               Book a Session
