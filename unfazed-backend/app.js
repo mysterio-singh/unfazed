@@ -6,10 +6,11 @@ const authRoutes = require("./src/routes/authRoutes");
 const schedulingRoutes = require("./src/routes/schedulingRoutes");
 const clientRoutes = require("./src/routes/clientRoutes");
 const paymentRoutes = require("./src/routes/paymentRoutes");
-
+const analyticsRoutes = require("./src/routes/analyticsRoutes");
 const {
   handleRazorpayWebhook,
 } = require("./src/controllers/paymentController");
+const noteRoutes = require("./src/routes/noteRoutes");
 
 const app = express();
 
@@ -41,7 +42,8 @@ app.use("/api/therapist", therapistRoutes);
 app.use("/api/scheduling", schedulingRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/payments", paymentRoutes);
-
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/notes", noteRoutes);
 console.log("ROUTES CHECK:", {
   authRoutes: typeof authRoutes,
   therapistRoutes: typeof therapistRoutes,

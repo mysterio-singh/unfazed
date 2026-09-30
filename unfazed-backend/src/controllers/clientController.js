@@ -1,5 +1,5 @@
 const Client = require("../models/Client");
-
+const { getEntitlement } = require("../services/entitlementService");
 const createClient = async (req, res, next) => {
   try {
     const {
@@ -20,14 +20,16 @@ const createClient = async (req, res, next) => {
       });
     }
 
-    if (consentGiven === true && !req.body.consentTimestamp) {
-      req.body.consentTimestamp = new Date();
-    }
+    const normalizedEmail = email.toLowerCase().trim();
 
+    // Check whether client already exists
     const existingClient = await Client.findOne({
       therapist: req.therapistId,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
     });
+
+ 
+
 
     if (existingClient) {
       return res.status(409).json({
@@ -36,23 +38,60 @@ const createClient = async (req, res, next) => {
       });
     }
 
+    // Get therapist entitlement
+    const entitlement = await getEntitlement(req.therapistId);
+
+    if (!entitlement) {
+      return res.status(403).json({
+        success: false,
+        message: "Active subscription plan is required",
+        upgradeRequired: true,
+      });
+    }
+
+    // Read active client cap from subscription configuration
+    const activeClientCap = entitlement.caps?.activeClients;
+
+    // Count only active clients
+    if (activeClientCap !== null && activeClientCap !== undefined) {
+      const activeClientCount = await Client.countDocuments({
+        therapist: req.therapistId,
+        status: "active",
+      });
+
+      if (activeClientCount >= activeClientCap) {
+        return res.status(403).json({
+          success: false,
+          message: "Active client limit reached for your current plan",
+          feature: "activeClientCap",
+          currentCount: activeClientCount,
+          limit: activeClientCap,
+          upgradeRequired: true,
+        });
+      }
+    }
+
+    // Add consent timestamp when consent is given
+    const consentTimestamp =
+      consentGiven === true
+        ? req.body.consentTimestamp || new Date()
+        : null;
+
     const client = await Client.create({
       therapist: req.therapistId,
       name,
-      email,
+      email: normalizedEmail,
       phone,
       timezone,
       demographics,
       presentingConcern,
       history,
       consentGiven,
-      consentTimestamp:
-        consentGiven === true
-          ? req.body.consentTimestamp || new Date()
-          : null,
+      consentTimestamp,
+      status: "active",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Client created successfully",
       client,
@@ -70,7 +109,7 @@ const getClients = async (req, res, next) => {
       createdAt: -1,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       clients,
     });
@@ -95,7 +134,7 @@ const getClientById = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       client,
     });
@@ -136,9 +175,13 @@ const updateClient = async (req, res, next) => {
       }
     });
 
+    if (req.body.email !== undefined) {
+      client.email = req.body.email.toLowerCase().trim();
+    }
+
     await client.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Client updated successfully",
       client,
@@ -147,7 +190,6 @@ const updateClient = async (req, res, next) => {
     next(error);
   }
 };
-
 
 module.exports = {
   createClient,

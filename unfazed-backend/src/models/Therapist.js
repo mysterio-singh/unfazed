@@ -43,6 +43,13 @@ const therapistSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+
+    subscriptionTier: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "SubscriptionTierConfig",
+  default: null,
+  index: true,
+},
   },
   {
     timestamps: true,
