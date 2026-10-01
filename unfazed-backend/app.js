@@ -11,7 +11,7 @@ const {
   handleRazorpayWebhook,
 } = require("./src/controllers/paymentController");
 const noteRoutes = require("./src/routes/noteRoutes");
-
+const packageRoutes = require("./src/routes/packageRoutes");
 const app = express();
 
 app.use(cors());
@@ -43,6 +43,7 @@ app.use("/api/scheduling", schedulingRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/packages", packageRoutes);
 app.use("/api/notes", noteRoutes);
 console.log("ROUTES CHECK:", {
   authRoutes: typeof authRoutes,

@@ -2,7 +2,9 @@ const razorpay = require("../config/razorpay");
 const Payment = require("../models/Payment");
 const Client = require("../models/Client");
 const Session = require("../models/Session");
-
+const Package = require("../models/Package");
+const Therapist = require("../models/Therapist");
+const ClientPackage = require("../models/ClientPackage");
 const createPaymentOrder = async (req, res, next) => {
   try {
     const {
@@ -67,10 +69,11 @@ const createPaymentOrder = async (req, res, next) => {
       therapist: req.therapistId,
       client: clientId,
       session: sessionId || null,
+      package: selectedPackage._id,
       gateway_order_id: order.id,
-      amount: Number(amount),
-      platform_fee: 0,
-      net_amount: Number(amount),
+      amount: paymentAmount,
+platform_fee: 0,
+net_amount: paymentAmount,
       currency: "INR",
       status: "created",
     });
@@ -87,6 +90,22 @@ const createPaymentOrder = async (req, res, next) => {
         id: payment._id,
         status: payment.status,
       },
+      package: {
+  id: selectedPackage._id,
+  name: selectedPackage.name,
+  sessionCount: selectedPackage.sessionCount,
+  totalAmount: selectedPackage.totalAmount,
+  validityDays: selectedPackage.validityDays,
+},
+  session: {
+    id: session._id,
+    startAt: session.startAt,
+    endAt: session.endAt,
+    durationMinutes: session.durationMinutes,
+    status: session.status,
+  },
+
+  keyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
     next(error);
@@ -98,29 +117,28 @@ const createPublicPaymentOrder = async (req, res, next) => {
     const { slug } = req.params;
 
     const {
-      name,
-      email,
-      phone,
-      startAt,
-      durationMinutes,
-      timezone,
-      consentGiven,
-      amount,
-    } = req.body;
-
+  name,
+  email,
+  phone,
+  startAt,
+  durationMinutes,
+  timezone,
+  consentGiven,
+  packageId,
+} = req.body;
     if (
-      !name ||
-      !email ||
-      !startAt ||
-      !durationMinutes ||
-      !amount
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Name, email, start time, duration and amount are required",
-      });
-    }
+  !name ||
+  !email ||
+  !startAt ||
+  !durationMinutes ||
+  !packageId
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Name, email, start time, duration and package are required",
+  });
+}
 
     if (consentGiven !== true) {
       return res.status(400).json({
@@ -163,6 +181,20 @@ const createPublicPaymentOrder = async (req, res, next) => {
         message: "Therapist not found",
       });
     }
+
+  const selectedPackage = await Package.findOne({
+  _id: packageId,
+  therapist: therapist._id,
+  isActive: true,
+});
+
+if (!selectedPackage) {
+  return res.status(404).json({
+    success: false,
+    message: "Package not found or inactive",
+  });
+}
+
 
     const overlappingSession = await Session.findOne({
       therapist: therapist._id,
@@ -230,20 +262,20 @@ const createPublicPaymentOrder = async (req, res, next) => {
       bookingSource: "client",
     });
 
-    const amountInPaise = Math.round(
-      Number(amount) * 100
-    );
+    const paymentAmount = Number(selectedPackage.totalAmount);
 
-    if (amountInPaise <= 0) {
-      await Session.findByIdAndUpdate(session._id, {
-        status: "cancelled",
-      });
+if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+  await Session.findByIdAndUpdate(session._id, {
+    status: "cancelled",
+  });
 
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment amount",
-      });
-    }
+  return res.status(400).json({
+    success: false,
+    message: "Invalid package amount",
+  });
+}
+
+const amountInPaise = Math.round(paymentAmount * 100);
 
     const order = await razorpay.orders.create({
       amount: amountInPaise,
@@ -257,16 +289,17 @@ const createPublicPaymentOrder = async (req, res, next) => {
     });
 
     const payment = await Payment.create({
-      therapist: therapist._id,
-      client: client._id,
-      session: session._id,
-      gateway_order_id: order.id,
-      amount: Number(amount),
-      platform_fee: 0,
-      net_amount: Number(amount),
-      currency: "INR",
-      status: "created",
-    });
+  therapist: therapist._id,
+  client: client._id,
+  session: session._id,
+  package: selectedPackage._id,
+  gateway_order_id: order.id,
+  amount: paymentAmount,
+  platform_fee: 0,
+  net_amount: paymentAmount,
+  currency: "INR",
+  status: "created",
+});
 
     res.status(201).json({
       success: true,
@@ -293,7 +326,51 @@ const createPublicPaymentOrder = async (req, res, next) => {
     next(error);
   }
 };
+const cancelPublicPayment = async (req, res, next) => {
+  try {
+    const { paymentId, sessionId } = req.body;
 
+    if (!paymentId || !sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment ID and session ID are required",
+      });
+    }
+
+    const payment = await Payment.findById(paymentId);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    if (payment.status === "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Paid payment cannot be cancelled",
+      });
+    }
+
+    payment.status = "failed";
+    await payment.save();
+
+    const session = await Session.findById(sessionId);
+
+    if (session && session.status === "pending_payment") {
+      session.status = "cancelled";
+      await session.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment cancelled and slot released",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 const verifyPayment = async (req, res, next) => {
   try {
     const {
@@ -431,54 +508,106 @@ const handleRazorpayWebhook = async (req, res, next) => {
     console.log("📩 Razorpay event:", event.event);
 
     if (event.event === "payment.captured") {
-      const paymentEntity =
-        event.payload.payment.entity;
+  const paymentEntity = event.payload.payment.entity;
 
-      const razorpayOrderId =
-        paymentEntity.order_id;
+  const razorpayOrderId = paymentEntity.order_id;
+  const razorpayPaymentId = paymentEntity.id;
 
-      const razorpayPaymentId =
-        paymentEntity.id;
+  console.log("💰 Payment captured");
+  console.log("Order ID:", razorpayOrderId);
+  console.log("Payment ID:", razorpayPaymentId);
 
-      console.log("💰 Payment captured");
-      console.log("Order ID:", razorpayOrderId);
-      console.log("Payment ID:", razorpayPaymentId);
+  const payment = await Payment.findOne({
+    gateway_order_id: razorpayOrderId,
+  });
 
-      const payment = await Payment.findOne({
-        gateway_order_id: razorpayOrderId,
+  if (!payment) {
+    console.log("❌ Payment record not found");
+
+    return res.status(404).json({
+      success: false,
+      message: "Payment record not found",
+    });
+  }
+
+  // Mark payment as PAID
+  if (payment.status !== "paid") {
+    payment.gateway_transaction_id = razorpayPaymentId;
+    payment.status = "paid";
+
+    await payment.save();
+
+    console.log("✅ Payment marked as PAID");
+  } else {
+    console.log("ℹ️ Payment already marked as PAID");
+  }
+
+  // Confirm session
+  if (payment.session) {
+    await Session.findByIdAndUpdate(
+      payment.session,
+      {
+        status: "confirmed",
+      }
+    );
+
+    console.log("✅ Session marked as CONFIRMED");
+  }
+
+  // Create ClientPackage only once
+  const existingClientPackage = await ClientPackage.findOne({
+    payment: payment._id,
+  });
+
+  if (!existingClientPackage) {
+    const selectedPackage = await Package.findById(
+      payment.package
+    );
+
+    if (!selectedPackage) {
+      console.log("❌ Package not found for payment");
+    } else {
+      const purchasedAt = new Date();
+
+      const expiresAt = new Date(purchasedAt);
+
+      expiresAt.setDate(
+        expiresAt.getDate() +
+          selectedPackage.validityDays
+      );
+
+      await ClientPackage.create({
+        therapist: payment.therapist,
+        client: payment.client,
+        package: selectedPackage._id,
+        payment: payment._id,
+
+        sessionsTotal: selectedPackage.sessionCount,
+        sessionsRemaining: selectedPackage.sessionCount,
+
+        purchasedAt,
+        expiresAt,
+        status: "active",
       });
 
-      if (!payment) {
-        console.log("❌ Payment record not found");
-
-        return res.status(404).json({
-          success: false,
-          message: "Payment record not found",
-        });
-      }
-
-      if (payment.status !== "paid") {
-        payment.gateway_transaction_id =
-          razorpayPaymentId;
-
-        payment.status = "paid";
-
-        await payment.save();
-
-        console.log("✅ Payment marked as PAID");
-      }
-
-      if (payment.session) {
-        await Session.findByIdAndUpdate(
-          payment.session,
-          {
-            status: "confirmed",
-          }
-        );
-
-        console.log("✅ Session marked as CONFIRMED");
-      }
+      console.log("✅ Client package created");
+      console.log(
+        "📦 Package:",
+        selectedPackage.name
+      );
+      console.log(
+        "🎟️ Sessions:",
+        selectedPackage.sessionCount
+      );
+      console.log(
+        "📅 Expires:",
+        expiresAt.toISOString()
+      );
     }
+  } else {
+    console.log("ℹ️ Client package already exists");
+  }
+}
 
     if (event.event === "payment.failed") {
       const paymentEntity =
@@ -527,10 +656,10 @@ const handleRazorpayWebhook = async (req, res, next) => {
 };
 
 
-
 module.exports = {
   createPaymentOrder,
   createPublicPaymentOrder,
+  cancelPublicPayment,
   verifyPayment,
   handleRazorpayWebhook,
 };

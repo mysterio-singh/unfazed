@@ -4,7 +4,8 @@ const authMiddleware = require("../middleware/authMiddleware");
 const {
   createPaymentOrder,
   createPublicPaymentOrder,
-    verifyPayment,
+  cancelPublicPayment,
+  verifyPayment,
 } = require("../controllers/paymentController");
 
 const router = express.Router();
@@ -24,5 +25,7 @@ router.post(
   "/public/verify",
   verifyPayment
 );
+
+router.post("/public/cancel", cancelPublicPayment);
 
 module.exports = router;

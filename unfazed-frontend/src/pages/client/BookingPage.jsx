@@ -55,6 +55,28 @@ const generateTimeSlots = (startTime, endTime, duration, buffer) => {
 function BookingPage() {
   const { slug } = useParams();
 
+  const [packages, setPackages] = useState([]);
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+
+  const [therapist, setTherapist] = useState(null);
+  const [availability, setAvailability] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showBookingForm, setShowBookingForm] = useState(false);
+
+  const [bookingForm, setBookingForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    consentGiven: false,
+  });
+
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState("");
+
 useEffect(() => {
   const script = document.createElement("script");
 
@@ -68,61 +90,55 @@ useEffect(() => {
   };
 }, []);
 
-
-  const [therapist, setTherapist] = useState(null);
-  const [availability, setAvailability] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState(null);
-
-  const [showBookingForm, setShowBookingForm] = useState(false);
-const [bookingForm, setBookingForm] = useState({
-  name: "",
-  email: "",
-  phone: "",
-  consentGiven: false,
-});
-const [bookingLoading, setBookingLoading] = useState(false);
-const [bookingMessage, setBookingMessage] = useState("");
-
   useEffect(() => {
-    const loadBookingData = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const loadBookingData = async () => {
+    try {
+      setLoading(true);
+      setError("");
 
-        const therapistResponse = await axiosInstance.get(
-          `/therapist/public/${slug}`
-        );
+      const therapistResponse = await axiosInstance.get(
+        `/therapist/public/${slug}`
+      );
 
-        const availabilityResponse = await axiosInstance.get(
-          `/scheduling/public/${slug}/availability`
-        );
+      const availabilityResponse = await axiosInstance.get(
+        `/scheduling/public/${slug}/availability`
+      );
 
-        if (therapistResponse.data.success) {
-          setTherapist(therapistResponse.data.therapist);
-        }
+      // 🔹 Load available packages
+      const packagesResponse = await axiosInstance.get(
+        `/packages/public/${slug}`
+      );
 
-        if (availabilityResponse.data.success) {
-          setAvailability(
-            availabilityResponse.data.availability || []
-          );
-        }
-      } catch (err) {
-        setError(
-          err.response?.data?.message ||
-            "Unable to load booking page"
-        );
-      } finally {
-        setLoading(false);
+      if (therapistResponse.data.success) {
+        setTherapist(therapistResponse.data.therapist);
       }
-    };
 
-    if (slug) {
-      loadBookingData();
+      if (availabilityResponse.data.success) {
+        setAvailability(
+          availabilityResponse.data.availability || []
+        );
+      }
+
+      // 🔹 Save packages in state
+      if (packagesResponse.data.success) {
+        setPackages(
+          packagesResponse.data.packages || []
+        );
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to load booking page"
+      );
+    } finally {
+      setLoading(false);
     }
-  }, [slug]);
+  };
+
+  if (slug) {
+    loadBookingData();
+  }
+}, [slug]);
 
 const handleConfirmBooking = async () => {
   try {
@@ -162,26 +178,28 @@ const handleConfirmBooking = async () => {
       `${selectedDate}T${selectedSlot.startTime}:00`
     ).toISOString();
 
-    /*
-      Temporary test price.
-      Later this will come from the Package / Entitlement system
-      instead of being sent from the frontend.
-    */
-    const amount = 100;
+    
+    
+   if (!selectedPackageId) {
+  setBookingMessage("Please select a package before booking.");
+  return;
+}
+
+
 
     const response = await axiosInstance.post(
-      `/payments/public/${slug}/create-order`,
-      {
-        name: bookingForm.name.trim(),
-        email: bookingForm.email.trim(),
-        phone: bookingForm.phone.trim(),
-        startAt,
-        durationMinutes: selectedSlot.durationMinutes,
-        timezone: "Asia/Kolkata",
-        consentGiven: bookingForm.consentGiven,
-        amount,
-      }
-    );
+  `/payments/public/${slug}/create-order`,
+  {
+    name: bookingForm.name.trim(),
+    email: bookingForm.email.trim(),
+    phone: bookingForm.phone.trim(),
+    startAt,
+    durationMinutes: selectedSlot.durationMinutes,
+    timezone: "Asia/Kolkata",
+    consentGiven: bookingForm.consentGiven,
+    packageId: selectedPackageId,
+  }
+);
 
     if (!response.data.success) {
       setBookingMessage(
@@ -259,12 +277,28 @@ const handleConfirmBooking = async () => {
       },
 
       modal: {
-        ondismiss: function () {
-          setBookingMessage(
-            "Payment was cancelled. Your slot is still pending payment."
-          );
-        },
-      },
+  ondismiss: async function () {
+    try {
+      await axiosInstance.post("/payments/public/cancel", {
+        paymentId: payment.id,
+        sessionId: session.id,
+      });
+
+      setBookingMessage(
+        "Payment was cancelled. Your slot is available again."
+      );
+    } catch (error) {
+      console.error(
+        "❌ Payment cancellation error:",
+        error.response?.data || error.message
+      );
+
+      setBookingMessage(
+        "Payment was cancelled, but we could not release the slot immediately."
+      );
+    }
+  },
+},
     };
 
     const razorpay = new window.Razorpay(options);
@@ -286,10 +320,19 @@ const handleConfirmBooking = async () => {
 
     razorpay.open();
   } catch (error) {
-    setBookingMessage(
-      error.response?.data?.message ||
-        "Unable to start payment."
-    );
+  console.error("❌ PAYMENT START ERROR:", error);
+
+  console.error(
+    "❌ RESPONSE:",
+    error.response?.data
+  );
+
+  setBookingMessage(
+    error.response?.data?.message ||
+      error.message ||
+      "Unable to start payment."
+  );
+
   } finally {
     setBookingLoading(false);
   }
@@ -459,10 +502,32 @@ const handleConfirmBooking = async () => {
 </button> */}
 
 
-  <div className="mt-5 rounded-xl border border-slate-700 bg-slate-900 p-5">
-    <h4 className="text-lg font-semibold text-white">
-      Your Details
-    </h4>
+  {/* Package Selection */}
+<div className="mt-5 rounded-xl border border-slate-700 bg-slate-900 p-5">
+  <h4 className="text-lg font-semibold text-white">
+    Select a Package
+  </h4>
+
+  <select
+    value={selectedPackageId}
+    onChange={(e) => setSelectedPackageId(e.target.value)}
+    className="mt-4 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+  >
+    <option value="">Select a package</option>
+
+    {packages.map((pkg) => (
+      <option key={pkg._id} value={pkg._id}>
+        {pkg.name} — ₹{pkg.totalAmount} — {pkg.sessionCount} sessions
+      </option>
+    ))}
+  </select>
+</div>
+
+{/* Your Details */}
+<div className="mt-5 rounded-xl border border-slate-700 bg-slate-900 p-5">
+  <h4 className="text-lg font-semibold text-white">
+    Your Details
+  </h4>
 
     <div className="mt-4 space-y-4">
       <input

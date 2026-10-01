@@ -22,6 +22,12 @@ const paymentSchema = new mongoose.Schema(
       default: null,
     },
 
+    package: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Package",
+  required: true,
+},
+
     gateway_transaction_id: {
       type: String,
       default: "",
