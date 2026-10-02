@@ -556,57 +556,50 @@ const handleRazorpayWebhook = async (req, res, next) => {
 
   // Create ClientPackage only once
   const existingClientPackage = await ClientPackage.findOne({
-    payment: payment._id,
-  });
+  payment: payment._id,
+});
 
-  if (!existingClientPackage) {
-    const selectedPackage = await Package.findById(
-      payment.package
+if (!existingClientPackage) {
+  const selectedPackage = await Package.findById(payment.package);
+
+  if (!selectedPackage) {
+    console.log("❌ Package not found for payment");
+  } else {
+    const purchasedAt = new Date();
+
+    const expiresAt = new Date(purchasedAt);
+    expiresAt.setDate(
+      expiresAt.getDate() + selectedPackage.validityDays
     );
 
-    if (!selectedPackage) {
-      console.log("❌ Package not found for payment");
-    } else {
-      const purchasedAt = new Date();
-
-      const expiresAt = new Date(purchasedAt);
-
-      expiresAt.setDate(
-        expiresAt.getDate() +
-          selectedPackage.validityDays
-      );
-
+    try {
       await ClientPackage.create({
         therapist: payment.therapist,
         client: payment.client,
         package: selectedPackage._id,
         payment: payment._id,
-
         sessionsTotal: selectedPackage.sessionCount,
         sessionsRemaining: selectedPackage.sessionCount,
-
         purchasedAt,
         expiresAt,
         status: "active",
       });
 
       console.log("✅ Client package created");
-      console.log(
-        "📦 Package:",
-        selectedPackage.name
-      );
-      console.log(
-        "🎟️ Sessions:",
-        selectedPackage.sessionCount
-      );
-      console.log(
-        "📅 Expires:",
-        expiresAt.toISOString()
-      );
+      console.log("📦 Package:", selectedPackage.name);
+      console.log("🎟️ Sessions:", selectedPackage.sessionCount);
+      console.log("📅 Expires:", expiresAt.toISOString());
+    } catch (error) {
+      if (error.code === 11000) {
+        console.log("ℹ️ Client package already exists");
+      } else {
+        throw error;
+      }
     }
-  } else {
-    console.log("ℹ️ Client package already exists");
   }
+} else {
+  console.log("ℹ️ Client package already exists");
+}
 }
 
     if (event.event === "payment.failed") {
