@@ -54,9 +54,9 @@ const getAnalytics = async (req, res, next) => {
 
     // 2. Active clients
     const activeClients = await Client.countDocuments({
-      therapist: therapistObjectId,
-      isActive: { $ne: false },
-    });
+  therapist: therapistObjectId,
+  status: "active",
+});
 
     // 3. Session statistics
     const sessionStats = await Session.aggregate([

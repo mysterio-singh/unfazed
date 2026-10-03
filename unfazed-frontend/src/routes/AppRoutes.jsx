@@ -1,3 +1,4 @@
+import LandingPage from "../pages/LandingPage";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
@@ -12,7 +13,9 @@ import BookingPage from "../pages/client/BookingPage";
 import Clients from "../pages/therapist/Clients";
 
 import ClientDetails from "../pages/therapist/ClientDetails";
-
+import Notes from "../pages/therapist/Notes";
+import ClientPortal from "../pages/client/ClientPortal";
+import Analytics from "../pages/therapist/Analytics";
 function AppRoutes() {
   return (
     <BrowserRouter>
@@ -56,6 +59,15 @@ function AppRoutes() {
   }
 />
 
+<Route
+  path="/notes"
+  element={
+    <ProtectedRoute>
+      <Notes />
+    </ProtectedRoute>
+  }
+/>
+
         
         <Route
   path="/profile"
@@ -65,9 +77,24 @@ function AppRoutes() {
     </ProtectedRoute>
   }
 />
+
+<Route
+  path="/analytics"
+  element={
+    <ProtectedRoute>
+      <Analytics />
+    </ProtectedRoute>
+  }
+/>
+
 <Route
   path="/booking/:slug"
   element={<BookingPage />}
+/>
+
+<Route
+  path="/client-portal"
+  element={<ClientPortal />}
 />
 
           <Route
@@ -76,14 +103,14 @@ function AppRoutes() {
 />
 
         <Route
-          path="/"
-          element={<Navigate to="/login" replace />}
-        />
+  path="/"
+  element={<LandingPage />}
+/>
 
         <Route
-          path="*"
-          element={<Navigate to="/login" replace />}
-        />
+  path="*"
+  element={<Navigate to="/" replace />}
+/>
       </Routes>
     </BrowserRouter>
   );

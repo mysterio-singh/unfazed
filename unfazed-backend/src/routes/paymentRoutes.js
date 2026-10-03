@@ -1,4 +1,5 @@
 const express = require("express");
+
 const authMiddleware = require("../middleware/authMiddleware");
 
 const {
@@ -6,6 +7,7 @@ const {
   createPublicPaymentOrder,
   cancelPublicPayment,
   verifyPayment,
+  downloadInvoice,
 } = require("../controllers/paymentController");
 
 const router = express.Router();
@@ -26,6 +28,16 @@ router.post(
   verifyPayment
 );
 
-router.post("/public/cancel", cancelPublicPayment);
+router.post(
+  "/public/cancel",
+  cancelPublicPayment
+);
+
+// Therapist-only invoice download
+router.get(
+  "/invoice/:paymentId",
+  authMiddleware,
+  downloadInvoice
+);
 
 module.exports = router;

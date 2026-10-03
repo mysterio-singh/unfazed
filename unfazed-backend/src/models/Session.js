@@ -9,6 +9,13 @@ const sessionSchema = new mongoose.Schema(
       index: true,
     },
 
+    clientPackage: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "ClientPackage",
+  default: null,
+  index: true,
+},
+
     client: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Client",

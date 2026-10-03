@@ -1,4 +1,5 @@
 const Client = require("../models/Client");
+const Session = require("../models/Session");
 const { getEntitlement } = require("../services/entitlementService");
 const createClient = async (req, res, next) => {
   try {
@@ -191,9 +192,82 @@ const updateClient = async (req, res, next) => {
   }
 };
 
+const getClientPortalProfile = async (req, res, next) => {
+  try {
+    const clientId = req.clientId;
+    const therapistId = req.therapistId;
+
+    const client = await Client.findOne({
+      _id: clientId,
+      therapist: therapistId,
+      status: "active",
+    }).select(
+      "_id name email phone timezone demographics presentingConcern history consentGiven consentTimestamp"
+    );
+
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: "Client profile not found",
+      });
+    }
+
+    return res.status(200).json({
+  success: true,
+  data: client,
+  chat: {
+    clientId: client._id,
+    therapistId,
+  },
+});
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getClientSessions = async (req, res, next) => {
+  try {
+    const clientId = req.clientId;
+    const therapistId = req.therapistId;
+
+    // Verify that this client belongs to this therapist
+    const client = await Client.findOne({
+      _id: clientId,
+      therapist: therapistId,
+      status: "active",
+    }).select("_id");
+
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: "Client not found",
+      });
+    }
+
+    // Fetch only this client's sessions
+    const sessions = await Session.find({
+      client: clientId,
+      therapist: therapistId,
+    })
+      .select(
+        "_id startAt endAt durationMinutes timezone status bookingSource createdAt"
+      )
+      .sort({ startAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: sessions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createClient,
   getClients,
   getClientById,
   updateClient,
+  getClientSessions,
+  getClientPortalProfile,
 };

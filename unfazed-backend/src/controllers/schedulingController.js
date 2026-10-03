@@ -1,6 +1,16 @@
 const Availability = require("../models/Availability");
 const Session = require("../models/Session");
+const mongoose = require("mongoose");
 
+const {
+  getActiveClientPackage,
+  consumeSession,
+} = require("../services/packageEntitlementService");
+const {
+  notifyBookingConfirmed,
+  notifyPostSession,
+} = require("../services/notificationService");
+const { sendWhatsAppStub } = require("../services/whatsappService");
 const getAvailability = async (req, res, next) => {
   try {
     console.log("🔥 PUBLIC AVAILABILITY API HIT");
@@ -180,6 +190,27 @@ const combineDateAndTime = (date, time) => {
   return result;
 };
 
+const getTherapistSessions = async (req, res, next) => {
+  try {
+    const sessions = await Session.find({
+      therapist: req.therapistId,
+    })
+      .populate("client", "name email")
+      .sort({ startAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: sessions,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/*
+  Create a booking/session.
+*/
 /*
   Create a booking/session.
 */
@@ -196,16 +227,14 @@ const createBooking = async (req, res, next) => {
     if (!clientId || !startAt || !durationMinutes) {
       return res.status(400).json({
         success: false,
-        message:
-          "Client, start time and duration are required",
+        message: "Client, start time and duration are required",
       });
     }
 
     if (![30, 45, 60, 90].includes(Number(durationMinutes))) {
       return res.status(400).json({
         success: false,
-        message:
-          "Duration must be 30, 45, 60 or 90 minutes",
+        message: "Duration must be 30, 45, 60 or 90 minutes",
       });
     }
 
@@ -243,7 +272,23 @@ const createBooking = async (req, res, next) => {
     }
 
     /*
+      Check for an active client package.
+    */
+    const clientPackage = await getActiveClientPackage({
+      therapistId: req.therapistId,
+      clientId,
+    });
+
+    if (!clientPackage) {
+      return res.status(403).json({
+        success: false,
+        message: "Client has no active package with remaining sessions",
+      });
+    }
+
+    /*
       Determine the weekday.
+
       JavaScript:
       0 = Sunday
       1 = Monday
@@ -315,8 +360,7 @@ const createBooking = async (req, res, next) => {
     if (blockedSlot) {
       return res.status(409).json({
         success: false,
-        message:
-          "This time slot is blocked and unavailable",
+        message: "This time slot is blocked and unavailable",
       });
     }
 
@@ -324,9 +368,10 @@ const createBooking = async (req, res, next) => {
       Use override availability when available.
       Otherwise use weekly availability.
     */
-    const overrideSlots = dateSpecificAvailability.filter(
-      (slot) => slot.type === "override"
-    );
+    const overrideSlots =
+      dateSpecificAvailability.filter(
+        (slot) => slot.type === "override"
+      );
 
     const availableSlots =
       overrideSlots.length > 0
@@ -370,15 +415,12 @@ const createBooking = async (req, res, next) => {
     */
     const overlappingSession = await Session.findOne({
       therapist: req.therapistId,
-
       status: {
         $in: ["scheduled", "confirmed"],
       },
-
       startAt: {
         $lt: end,
       },
-
       endAt: {
         $gt: start,
       },
@@ -387,36 +429,80 @@ const createBooking = async (req, res, next) => {
     if (overlappingSession) {
       return res.status(409).json({
         success: false,
-        message:
-          "This time slot is already booked",
+        message: "This time slot is already booked",
       });
     }
 
     /*
-      Create the booking only after all checks pass.
+      Create the booking and consume the package
+      inside one MongoDB transaction.
     */
-    const session = await Session.create({
-      therapist: req.therapistId,
-      client: clientId,
-      startAt: start,
-      endAt: end,
-      durationMinutes: duration,
-      timezone:
-        timezone ||
-        client.timezone ||
-        "Asia/Kolkata",
-      status: "confirmed",
-      bookingSource:
-        bookingSource === "therapist"
-          ? "therapist"
-          : "client",
-    });
+    const dbSession = await mongoose.startSession();
 
-    res.status(201).json({
-      success: true,
-      message: "Session booked successfully",
-      session,
-    });
+    try {
+      dbSession.startTransaction();
+
+      const [session] = await Session.create(
+        [
+          {
+            therapist: req.therapistId,
+            client: clientId,
+            clientPackage: clientPackage._id,
+            startAt: start,
+            endAt: end,
+            durationMinutes: duration,
+            timezone:
+              timezone ||
+              client.timezone ||
+              "Asia/Kolkata",
+            status: "confirmed",
+            bookingSource:
+              bookingSource === "therapist"
+                ? "therapist"
+                : "client",
+          },
+        ],
+        {
+          session: dbSession,
+        }
+      );
+
+      await consumeSession({
+        therapistId: req.therapistId,
+        clientId,
+        session: dbSession,
+      });
+
+      await dbSession.commitTransaction();
+
+      await notifyBookingConfirmed({
+        therapistId: req.therapistId,
+        clientId,
+        sessionId: session._id,
+        startAt: session.startAt,
+      });
+
+      await sendWhatsAppStub({
+        therapistId: req.therapistId,
+        clientId,
+        sessionId: session._id,
+        eventType: "booking_confirmed",
+        message: `Your therapy session has been confirmed for ${new Date(
+          session.startAt
+        ).toLocaleString("en-IN")}.`,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Session booked successfully",
+        session,
+      });
+    } catch (error) {
+      await dbSession.abortTransaction();
+      throw error;
+    } finally {
+      await dbSession.endSession();
+    }
   } catch (error) {
     next(error);
   }
@@ -479,12 +565,62 @@ const getPublicAvailability = async (req, res, next) => {
   }
 };
 
+const completeSession = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await Session.findOne({
+      _id: sessionId,
+      therapist: req.therapistId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    if (session.status === "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Session is already completed",
+      });
+    }
+
+    if (["cancelled", "no_show"].includes(session.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot complete a ${session.status} session`,
+      });
+    }
+
+    session.status = "completed";
+
+    await session.save();
+await notifyPostSession({
+  therapistId: session.therapist,
+  clientId: session.client,
+  sessionId: session._id,
+});
+
+    res.status(200).json({
+      success: true,
+      message: "Session completed successfully",
+      session,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAvailability,
   createAvailability,
   updateAvailability,
   deleteAvailability,
   createBooking,
-  
+  getTherapistSessions,
   getPublicAvailability,
+  completeSession,
 };

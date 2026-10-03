@@ -8,8 +8,9 @@ const {
   updateAvailability,
   deleteAvailability,
   createBooking,
-  
+  getTherapistSessions,
   getPublicAvailability,
+  completeSession,
 } = require("../controllers/schedulingController");
 
 const router = express.Router();
@@ -32,6 +33,8 @@ router.put(
   updateAvailability
 );
 
+router.patch("/sessions/:sessionId/complete", authMiddleware, completeSession);
+
 router.delete(
   "/availability/:id",
   authMiddleware,
@@ -43,6 +46,13 @@ router.post(
   authMiddleware,
   createBooking
 );
+
+router.get(
+  "/sessions",
+  authMiddleware,
+  getTherapistSessions
+);
+
 
 router.get(
   "/public/:slug/availability",

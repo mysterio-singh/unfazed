@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
-
+import TherapistChatBox from "../../components/chat/TherapistChatBox";
 function ClientDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  const therapistId = JSON.parse(
+  localStorage.getItem("unfazed_user")
+)?.therapistId;
 
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,6 +28,11 @@ const [formData, setFormData] = useState({
 
 const [saving, setSaving] = useState(false);
 const [saveMessage, setSaveMessage] = useState("");
+const [bookingOpen, setBookingOpen] = useState(false);
+const [bookingDateTime, setBookingDateTime] = useState("");
+const [bookingDuration, setBookingDuration] = useState("60");
+const [bookingLoading, setBookingLoading] = useState(false);
+const [bookingMessage, setBookingMessage] = useState("");
 
   useEffect(() => {
     const loadClient = async () => {
@@ -119,6 +128,56 @@ const [saveMessage, setSaveMessage] = useState("");
   }
 };
 
+const handleBookSession = async () => {
+  try {
+    if (!bookingDateTime) {
+      setBookingMessage("Please select a date and time.");
+      return;
+    }
+
+    setBookingLoading(true);
+    setBookingMessage("");
+
+    const token = localStorage.getItem("unfazed_token");
+
+    const startAt = new Date(bookingDateTime);
+
+    if (Number.isNaN(startAt.getTime())) {
+      setBookingMessage("Invalid date or time.");
+      return;
+    }
+
+    const response = await axiosInstance.post(
+      "/scheduling/book",
+      {
+        clientId: id,
+        startAt: startAt.toISOString(),
+        durationMinutes: Number(bookingDuration),
+        timezone: client?.timezone || "Asia/Kolkata",
+        bookingSource: "therapist",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (response.data.success) {
+      setBookingMessage("Session booked successfully! ✓");
+      setBookingDateTime("");
+      setBookingOpen(false);
+    }
+  } catch (err) {
+    setBookingMessage(
+      err.response?.data?.message ||
+        "Unable to book session."
+    );
+  } finally {
+    setBookingLoading(false);
+  }
+};
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
@@ -174,9 +233,22 @@ const [saveMessage, setSaveMessage] = useState("");
               </p>
             </div>
 
-            <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-sm text-emerald-400">
-              {client.status}
-            </span>
+            <div className="flex items-center gap-3">
+  <button
+    type="button"
+    onClick={() => {
+      setBookingOpen(true);
+      setBookingMessage("");
+    }}
+    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+  >
+    📅 Book Session
+  </button>
+
+  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-sm text-emerald-400">
+    {client.status}
+  </span>
+</div>
           </div>
 
           <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -373,7 +445,94 @@ const [saveMessage, setSaveMessage] = useState("");
       )}
     </div>
   )}
-</div>
+    </div>
+
+{bookingOpen && (
+  <div className="mt-5 rounded-xl border border-blue-500/30 bg-slate-950 p-5">
+    <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-lg font-semibold">
+          Book Therapy Session
+        </h2>
+
+        <p className="mt-1 text-sm text-slate-400">
+          Schedule a session for {client.name}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setBookingOpen(false);
+          setBookingMessage("");
+        }}
+        className="text-sm text-slate-400 hover:text-white"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div>
+        <label className="text-sm text-slate-400">
+          Date & Time
+        </label>
+
+        <input
+          type="datetime-local"
+          value={bookingDateTime}
+          onChange={(e) =>
+            setBookingDateTime(e.target.value)
+          }
+          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="text-sm text-slate-400">
+          Session Duration
+        </label>
+
+        <select
+          value={bookingDuration}
+          onChange={(e) =>
+            setBookingDuration(e.target.value)
+          }
+          className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+        >
+          <option value="30">30 minutes</option>
+          <option value="45">45 minutes</option>
+          <option value="60">60 minutes</option>
+          <option value="90">90 minutes</option>
+        </select>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={handleBookSession}
+      disabled={bookingLoading}
+      className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {bookingLoading
+        ? "Booking..."
+        : "Confirm Booking"}
+    </button>
+
+    {bookingMessage && (
+      <p className="mt-3 text-center text-sm text-slate-300">
+        {bookingMessage}
+      </p>
+    )}
+  </div>
+)}
+
+{therapistId && id && (
+  <TherapistChatBox
+    clientId={id}
+    therapistId={therapistId}
+  />
+)}
 
         </div>
       </div>

@@ -12,6 +12,8 @@ const {
 } = require("./src/controllers/paymentController");
 const noteRoutes = require("./src/routes/noteRoutes");
 const packageRoutes = require("./src/routes/packageRoutes");
+const chatRoutes = require("./src/routes/chatRoutes");
+const leadRoutes = require("./src/routes/leadRoutes");
 const app = express();
 
 app.use(cors());
@@ -44,6 +46,8 @@ app.use("/api/clients", clientRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/packages", packageRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/leads", leadRoutes);
 app.use("/api/notes", noteRoutes);
 console.log("ROUTES CHECK:", {
   authRoutes: typeof authRoutes,

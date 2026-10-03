@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
 
 const daysOfWeek = [
@@ -68,11 +68,14 @@ function BookingPage() {
   const [showBookingForm, setShowBookingForm] = useState(false);
 
   const [bookingForm, setBookingForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    consentGiven: false,
-  });
+  name: "",
+  email: "",
+  phone: "",
+  dateOfBirth: "",
+  gender: "",
+  presentingConcern: "",
+  consentGiven: false,
+});
 
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
@@ -193,6 +196,10 @@ const handleConfirmBooking = async () => {
     name: bookingForm.name.trim(),
     email: bookingForm.email.trim(),
     phone: bookingForm.phone.trim(),
+
+    dateOfBirth: bookingForm.dateOfBirth,
+    gender: bookingForm.gender,
+
     startAt,
     durationMinutes: selectedSlot.durationMinutes,
     timezone: "Asia/Kolkata",
@@ -249,10 +256,28 @@ const handleConfirmBooking = async () => {
             );
 
           if (verifyResponse.data.success) {
-            setBookingMessage(
-              "Payment successful! Your session is confirmed 🎉"
-            );
-          } else {
+  const clientToken =
+    verifyResponse.data.clientPortal?.token;
+
+  if (clientToken) {
+    localStorage.setItem(
+      "unfazed_client_token",
+      clientToken
+    );
+
+    setBookingMessage(
+      "Payment successful! Redirecting to your client portal..."
+    );
+
+    setTimeout(() => {
+      navigate("/client-portal");
+    }, 1000);
+  }
+
+
+  // Open Client Portal
+  window.location.href = "/client-portal";
+} else {
             setBookingMessage(
               verifyResponse.data.message ||
                 "Payment verification failed."
@@ -568,6 +593,50 @@ const handleConfirmBooking = async () => {
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
       />
+      <div>
+  <label className="mb-2 block text-sm font-medium text-slate-300">
+    Date of Birth
+  </label>
+
+  <input
+    type="date"
+    value={bookingForm.dateOfBirth}
+    onChange={(e) =>
+      setBookingForm({
+        ...bookingForm,
+        dateOfBirth: e.target.value,
+      })
+    }
+    max={new Date().toISOString().split("T")[0]}
+    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+  />
+</div>
+
+<div>
+  <label className="mb-2 block text-sm font-medium text-slate-300">
+    Gender
+  </label>
+
+  <select
+    value={bookingForm.gender}
+    onChange={(e) =>
+      setBookingForm({
+        ...bookingForm,
+        gender: e.target.value,
+      })
+    }
+    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+  >
+    <option value="">Select gender</option>
+    <option value="male">Male</option>
+    <option value="female">Female</option>
+    <option value="non-binary">Non-binary</option>
+    <option value="prefer-not-to-say">
+      Prefer not to say
+    </option>
+  </select>
+</div>
+      
 
       <label className="flex items-start gap-3 text-sm text-slate-300">
         <input

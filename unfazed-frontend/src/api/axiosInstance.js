@@ -7,4 +7,31 @@ const axiosInstance = axios.create({
   },
 });
 
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const clientRoutes = [
+      "/clients/portal",
+      "/notes/client/shared",
+      "/chat/history",
+    ];
+
+    const isClientRoute = clientRoutes.some((route) =>
+      config.url?.startsWith(route)
+    );
+
+    const token = isClientRoute
+      ? localStorage.getItem("unfazed_client_token")
+      : localStorage.getItem("unfazed_token");
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export default axiosInstance;

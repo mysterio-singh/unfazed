@@ -5,6 +5,7 @@ const Session = require("../models/Session");
 const Package = require("../models/Package");
 const Therapist = require("../models/Therapist");
 const ClientPackage = require("../models/ClientPackage");
+const { generateInvoicePDF } = require("../services/invoiceService");
 const createPaymentOrder = async (req, res, next) => {
   try {
     const {
@@ -117,28 +118,39 @@ const createPublicPaymentOrder = async (req, res, next) => {
     const { slug } = req.params;
 
     const {
-  name,
-  email,
-  phone,
-  startAt,
-  durationMinutes,
-  timezone,
-  consentGiven,
-  packageId,
-} = req.body;
+      name,
+      email,
+      phone,
+      dateOfBirth,
+      gender,
+      presentingConcern,
+      startAt,
+      durationMinutes,
+      timezone,
+      consentGiven,
+      packageId,
+    } = req.body;
+
     if (
-  !name ||
-  !email ||
-  !startAt ||
-  !durationMinutes ||
-  !packageId
-) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Name, email, start time, duration and package are required",
-  });
-}
+      !name ||
+      !email ||
+      !startAt ||
+      !durationMinutes ||
+      !packageId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Name, email, start time, duration and package are required",
+      });
+    }
+
+    if (!dateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        message: "Date of birth is required",
+      });
+    }
 
     if (consentGiven !== true) {
       return res.status(400).json({
@@ -151,6 +163,45 @@ const createPublicPaymentOrder = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Invalid session duration",
+      });
+    }
+
+    // Calculate age from date of birth
+    const dob = new Date(dateOfBirth);
+
+    if (Number.isNaN(dob.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date of birth",
+      });
+    }
+
+    if (dob > new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Date of birth cannot be in the future",
+      });
+    }
+
+    const today = new Date();
+
+    let age = today.getFullYear() - dob.getFullYear();
+
+    const monthDifference =
+      today.getMonth() - dob.getMonth();
+
+    if (
+      monthDifference < 0 ||
+      (monthDifference === 0 &&
+        today.getDate() < dob.getDate())
+    ) {
+      age--;
+    }
+
+    if (age < 0 || age > 120) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid date of birth",
       });
     }
 
@@ -182,19 +233,18 @@ const createPublicPaymentOrder = async (req, res, next) => {
       });
     }
 
-  const selectedPackage = await Package.findOne({
-  _id: packageId,
-  therapist: therapist._id,
-  isActive: true,
-});
+    const selectedPackage = await Package.findOne({
+      _id: packageId,
+      therapist: therapist._id,
+      isActive: true,
+    });
 
-if (!selectedPackage) {
-  return res.status(404).json({
-    success: false,
-    message: "Package not found or inactive",
-  });
-}
-
+    if (!selectedPackage) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found or inactive",
+      });
+    }
 
     const overlappingSession = await Session.findOne({
       therapist: therapist._id,
@@ -232,6 +282,15 @@ if (!selectedPackage) {
         email: email.toLowerCase().trim(),
         phone: phone?.trim() || "",
         timezone: timezone || "Asia/Kolkata",
+
+        demographics: {
+          age,
+          gender: gender || "",
+        },
+
+        presentingConcern:
+          presentingConcern?.trim() || "",
+
         consentGiven: true,
         consentTimestamp: new Date(),
         status: "active",
@@ -241,6 +300,25 @@ if (!selectedPackage) {
 
       if (phone !== undefined) {
         client.phone = phone.trim();
+      }
+
+      client.timezone =
+        timezone || client.timezone || "Asia/Kolkata";
+
+      client.demographics = {
+        ...(client.demographics?.toObject?.() ||
+          client.demographics ||
+          {}),
+        age,
+        gender:
+          gender !== undefined
+            ? gender
+            : client.demographics?.gender || "",
+      };
+
+      if (presentingConcern !== undefined) {
+        client.presentingConcern =
+          presentingConcern.trim();
       }
 
       if (!client.consentGiven) {
@@ -262,20 +340,27 @@ if (!selectedPackage) {
       bookingSource: "client",
     });
 
-    const paymentAmount = Number(selectedPackage.totalAmount);
+    const paymentAmount = Number(
+      selectedPackage.totalAmount
+    );
 
-if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-  await Session.findByIdAndUpdate(session._id, {
-    status: "cancelled",
-  });
+    if (
+      !Number.isFinite(paymentAmount) ||
+      paymentAmount <= 0
+    ) {
+      await Session.findByIdAndUpdate(session._id, {
+        status: "cancelled",
+      });
 
-  return res.status(400).json({
-    success: false,
-    message: "Invalid package amount",
-  });
-}
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package amount",
+      });
+    }
 
-const amountInPaise = Math.round(paymentAmount * 100);
+    const amountInPaise = Math.round(
+      paymentAmount * 100
+    );
 
     const order = await razorpay.orders.create({
       amount: amountInPaise,
@@ -289,30 +374,33 @@ const amountInPaise = Math.round(paymentAmount * 100);
     });
 
     const payment = await Payment.create({
-  therapist: therapist._id,
-  client: client._id,
-  session: session._id,
-  package: selectedPackage._id,
-  gateway_order_id: order.id,
-  amount: paymentAmount,
-  platform_fee: 0,
-  net_amount: paymentAmount,
-  currency: "INR",
-  status: "created",
-});
+      therapist: therapist._id,
+      client: client._id,
+      session: session._id,
+      package: selectedPackage._id,
+      gateway_order_id: order.id,
+      amount: paymentAmount,
+      platform_fee: 0,
+      net_amount: paymentAmount,
+      currency: "INR",
+      status: "created",
+    });
 
     res.status(201).json({
       success: true,
       message: "Payment order created successfully",
+
       order: {
         id: order.id,
         amount: order.amount,
         currency: order.currency,
       },
+
       payment: {
         id: payment._id,
         status: payment.status,
       },
+
       session: {
         id: session._id,
         startAt: session.startAt,
@@ -320,6 +408,7 @@ const amountInPaise = Math.round(paymentAmount * 100);
         durationMinutes: session.durationMinutes,
         status: session.status,
       },
+
       keyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
@@ -395,7 +484,9 @@ const verifyPayment = async (req, res, next) => {
     }
 
     const crypto = require("crypto");
+    const jwt = require("jsonwebtoken");
 
+    // Verify Razorpay signature
     const generatedSignature = crypto
       .createHmac(
         "sha256",
@@ -413,6 +504,7 @@ const verifyPayment = async (req, res, next) => {
       });
     }
 
+    // Find payment
     const payment = await Payment.findById(paymentId);
 
     if (!payment) {
@@ -422,6 +514,7 @@ const verifyPayment = async (req, res, next) => {
       });
     }
 
+    // Verify Razorpay order belongs to this payment
     if (payment.gateway_order_id !== razorpay_order_id) {
       return res.status(400).json({
         success: false,
@@ -429,6 +522,18 @@ const verifyPayment = async (req, res, next) => {
       });
     }
 
+    // Verify payment is linked to the requested session
+    if (
+      !payment.session ||
+      payment.session.toString() !== sessionId.toString()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment and session mismatch",
+      });
+    }
+
+    // Find session
     const session = await Session.findById(sessionId);
 
     if (!session) {
@@ -438,27 +543,56 @@ const verifyPayment = async (req, res, next) => {
       });
     }
 
-    payment.gateway_transaction_id =
-      razorpay_payment_id;
+    // Verify payment and session belong to the same client
+    if (
+      !payment.client ||
+      !session.client ||
+      payment.client.toString() !== session.client.toString()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment and session client mismatch",
+      });
+    }
 
+    // Mark payment as paid
+    payment.gateway_transaction_id = razorpay_payment_id;
     payment.status = "paid";
-
     await payment.save();
 
+    // Confirm session
     session.status = "confirmed";
-
     await session.save();
+
+    // Create secure Client Portal token
+    const clientToken = jwt.sign(
+      {
+        clientId: payment.client.toString(),
+        therapistId: payment.therapist.toString(),
+        role: "client",
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
 
     return res.status(200).json({
       success: true,
       message: "Payment verified successfully",
+
       payment: {
         id: payment._id,
         status: payment.status,
       },
+
       session: {
         id: session._id,
         status: session.status,
+      },
+
+      clientPortal: {
+        token: clientToken,
       },
     });
   } catch (error) {
@@ -648,6 +782,73 @@ if (!existingClientPackage) {
   }
 };
 
+const downloadInvoice = async (req, res, next) => {
+  try {
+    const { paymentId } = req.params;
+
+    if (!paymentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment ID is required",
+      });
+    }
+
+    const payment = await Payment.findById(paymentId)
+      .populate("therapist")
+      .populate("client")
+      .populate("package");
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    // Therapist can only access their own invoice
+    if (
+      !req.therapistId ||
+      payment.therapist._id.toString() !== req.therapistId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to access this invoice",
+      });
+    }
+
+    if (payment.status !== "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Invoice is available only after successful payment",
+      });
+    }
+
+    const pdfBuffer = await generateInvoicePDF({
+      payment,
+      therapist: payment.therapist,
+      client: payment.client,
+      packageData: payment.package,
+    });
+
+    const invoiceNumber = `UNF-${payment._id
+      .toString()
+      .slice(-8)
+      .toUpperCase()}`;
+
+    res.setHeader("Content-Type", "application/pdf");
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${invoiceNumber}.pdf"`
+    );
+
+    res.setHeader("Content-Length", pdfBuffer.length);
+
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
 
 module.exports = {
   createPaymentOrder,
@@ -655,4 +856,5 @@ module.exports = {
   cancelPublicPayment,
   verifyPayment,
   handleRazorpayWebhook,
+  downloadInvoice,
 };

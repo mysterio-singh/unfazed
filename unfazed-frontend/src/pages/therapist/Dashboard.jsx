@@ -1,8 +1,9 @@
 import { useAuth } from "../../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 function Dashboard() {
   const { therapist, logout } = useAuth();
-
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
@@ -77,34 +78,46 @@ function Dashboard() {
           </h3>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <button className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500">
-              <p className="font-semibold">Clients</p>
-              <p className="mt-1 text-sm text-slate-400">
-                Manage your clients
-              </p>
-            </button>
+  <button
+    onClick={() => navigate("/clients")}
+    className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500 hover:bg-slate-800"
+  >
+    <p className="font-semibold">Clients</p>
+    <p className="mt-1 text-sm text-slate-400">
+      Manage your clients
+    </p>
+  </button>
 
-            <button className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500">
-              <p className="font-semibold">Schedule</p>
-              <p className="mt-1 text-sm text-slate-400">
-                Manage availability
-              </p>
-            </button>
+  <button
+    onClick={() => navigate("/schedule")}
+    className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500 hover:bg-slate-800"
+  >
+    <p className="font-semibold">Schedule</p>
+    <p className="mt-1 text-sm text-slate-400">
+      Manage availability
+    </p>
+  </button>
 
-            <button className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500">
-              <p className="font-semibold">Notes</p>
-              <p className="mt-1 text-sm text-slate-400">
-                View clinical notes
-              </p>
-            </button>
+  <button
+    onClick={() => navigate("/notes")}
+    className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500 hover:bg-slate-800"
+  >
+    <p className="font-semibold">Notes</p>
+    <p className="mt-1 text-sm text-slate-400">
+      View clinical notes
+    </p>
+  </button>
 
-            <button className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500">
-              <p className="font-semibold">Analytics</p>
-              <p className="mt-1 text-sm text-slate-400">
-                View practice insights
-              </p>
-            </button>
-          </div>
+  <button
+    onClick={() => navigate("/analytics")}
+    className="rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-indigo-500 hover:bg-slate-800"
+  >
+    <p className="font-semibold">Analytics</p>
+    <p className="mt-1 text-sm text-slate-400">
+      View practice insights
+    </p>
+  </button>
+</div>
         </div>
       </main>
     </div>
