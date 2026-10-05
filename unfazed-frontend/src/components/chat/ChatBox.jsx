@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-
+import axiosInstance from "../../api/axiosInstance";
 import { createSocketConnection } from "../../sockets/socket";
 
 function ChatBox({ clientId, therapistId }) {
@@ -19,14 +19,11 @@ function ChatBox({ clientId, therapistId }) {
 
     const loadChatHistory = async () => {
       try {
-        const response = await fetch(
-          "http://localhost:5000/api/chat/history",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const response = await axiosInstance.get("/chat/history", {
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+});
 
         const data = await response.json();
 
