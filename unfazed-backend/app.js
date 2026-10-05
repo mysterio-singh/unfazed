@@ -45,9 +45,9 @@ app.use("/scheduling", schedulingRoutes);
 app.use("/clients", clientRoutes);
 app.use("/payments", paymentRoutes);
 app.use("/analytics", analyticsRoutes);
-app.use("/api/packages", packageRoutes);
-app.use("/api/chat", chatRoutes);
-app.use("/api/leads", leadRoutes);
+app.use("/packages", packageRoutes);
+app.use("/chat", chatRoutes);
+app.use("/leads", leadRoutes);
 app.use("/notes", noteRoutes);
 
 
