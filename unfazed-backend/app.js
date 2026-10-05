@@ -39,22 +39,16 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/therapist", therapistRoutes);
-app.use("/api/scheduling", schedulingRoutes);
-app.use("/api/clients", clientRoutes);
-app.use("/api/payments", paymentRoutes);
-app.use("/api/analytics", analyticsRoutes);
+app.use("/auth", authRoutes);
+app.use("/therapist", therapistRoutes);
+app.use("/scheduling", schedulingRoutes);
+app.use("/clients", clientRoutes);
+app.use("/payments", paymentRoutes);
+app.use("/analytics", analyticsRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/leads", leadRoutes);
-app.use("/api/notes", noteRoutes);
-console.log("ROUTES CHECK:", {
-  authRoutes: typeof authRoutes,
-  therapistRoutes: typeof therapistRoutes,
-  schedulingRoutes: typeof schedulingRoutes,
-  clientRoutes: typeof clientRoutes,
-  paymentRoutes: typeof paymentRoutes,
-});
+app.use("/notes", noteRoutes);
+
 
 module.exports = app;
