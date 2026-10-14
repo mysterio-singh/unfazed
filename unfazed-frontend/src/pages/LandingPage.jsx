@@ -248,22 +248,31 @@ function LandingPage() {
       {/* Featured Therapists */}
       <section id="therapists" className="border-t border-slate-800">
         <div className="mx-auto max-w-7xl px-6 py-20">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-wider text-blue-400">
-                Featured therapists
-              </p>
+          
+<div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+  <div>
+    <p className="text-sm font-medium uppercase tracking-wider text-blue-400">
+      Featured therapists
+    </p>
 
-              <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-                Find the right professional for you
-              </h2>
+    <h2 className="mt-3 text-3xl font-bold md:text-4xl">
+      Find the right professional for you
+    </h2>
 
-              <p className="mt-4 max-w-2xl text-slate-400">
-                Explore therapist profiles, learn about their expertise, and
-                choose a professional you feel comfortable with.
-              </p>
-            </div>
-          </div>
+    <p className="mt-4 max-w-2xl text-slate-400">
+      Explore therapist profiles, learn about their expertise, and
+      choose a professional you feel comfortable with.
+    </p>
+  </div>
+
+  <Link
+    to="/therapists"
+    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
+  >
+    Explore All Therapists <span>→</span>
+  </Link>
+</div>
+
 
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {featuredTherapists.map((therapist) => (

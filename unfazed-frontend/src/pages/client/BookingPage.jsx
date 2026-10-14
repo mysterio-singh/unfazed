@@ -51,6 +51,8 @@ const generateTimeSlots = (startTime, endTime, duration, buffer) => {
 
   return slots;
 };
+  
+
 
 function BookingPage() {
   const { slug } = useParams();
@@ -65,7 +67,25 @@ function BookingPage() {
 
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const isSlotInPast = (dateString, startTime) => {
+  if (!dateString) return false;
+
+  const slotDateTime = new Date(
+    `${dateString}T${startTime}:00`
+  );
+
+  return slotDateTime <= currentTime;
+};
   const [showBookingForm, setShowBookingForm] = useState(false);
+  useEffect(() => {
+  const timer = setInterval(() => {
+    setCurrentTime(new Date());
+  }, 30000);
+
+  return () => clearInterval(timer);
+}, []);
+  
 
   const [bookingForm, setBookingForm] = useState({
   name: "",
@@ -143,7 +163,42 @@ useEffect(() => {
   }
 }, [slug]);
 
-const handleConfirmBooking = async () => {
+
+
+  const handleConfirmBooking = async () => {
+    
+      setBookingLoading(true);
+    setBookingMessage("");
+
+    // Age validation
+    if (!bookingForm.dateOfBirth) {
+      setBookingMessage("Please select your date of birth.");
+      setBookingLoading(false);
+      return;
+    }
+
+    const dob = new Date(`${bookingForm.dateOfBirth}T00:00:00`);
+    const today = new Date();
+
+    let age = today.getFullYear() - dob.getFullYear();
+
+    const monthDiff = today.getMonth() - dob.getMonth();
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < dob.getDate())
+    ) {
+      age--;
+    }
+
+    if (age < 1) {
+      setBookingMessage("Client must be at least 1 year old.");
+      setBookingLoading(false);
+      return;
+    }
+
+
+
   try {
     setBookingLoading(true);
     setBookingMessage("");
@@ -176,6 +231,35 @@ const handleConfirmBooking = async () => {
       );
       return;
     }
+
+    // Age validation - minimum 1 year
+if (!bookingForm.dateOfBirth) {
+  setBookingMessage("Please select your date of birth.");
+  setBookingLoading(false);
+  return;
+}
+
+const dob = new Date(`${bookingForm.dateOfBirth}T00:00:00`);
+const today = new Date();
+
+let age = today.getFullYear() - dob.getFullYear();
+
+const monthDiff = today.getMonth() - dob.getMonth();
+
+if (
+  monthDiff < 0 ||
+  (monthDiff === 0 && today.getDate() < dob.getDate())
+) {
+  age--;
+}
+
+if (age < 1) {
+  setBookingMessage("Client must be at least 1 year old.");
+  setBookingLoading(false);
+  return;
+}
+
+
 
     const startAt = new Date(
       `${selectedDate}T${selectedSlot.startTime}:00`
@@ -477,7 +561,17 @@ const handleConfirmBooking = async () => {
             </div>
           ) : (
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {weeklyAvailability.map((slot) => (
+              {weeklyAvailability
+  .filter((slot) => {
+    if (!selectedDate) return false;
+
+    const selectedDay = new Date(
+      `${selectedDate}T00:00:00`
+    ).getDay();
+
+    return slot.dayOfWeek === selectedDay;
+  })
+  .map((slot) => (
                 <div
                   key={slot._id}
                   className="rounded-xl border border-slate-800 bg-slate-950 p-5"
@@ -607,7 +701,11 @@ const handleConfirmBooking = async () => {
         dateOfBirth: e.target.value,
       })
     }
-    max={new Date().toISOString().split("T")[0]}
+    max={(() => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 1);
+  return date.toISOString().split("T")[0];
+})()}
     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
   />
 </div>
@@ -682,11 +780,19 @@ const handleConfirmBooking = async () => {
 
                   <div className="mt-4 space-y-2">
   {generateTimeSlots(
-    slot.startTime,
-    slot.endTime,
-    slot.sessionDuration,
-    slot.bufferMinutes
-  ).map((timeSlot) => (
+  slot.startTime,
+  slot.endTime,
+  slot.sessionDuration,
+  slot.bufferMinutes
+)
+  .filter(
+    (timeSlot) =>
+      !isSlotInPast(
+        selectedDate,
+        timeSlot.startTime
+      )
+  )
+  .map((timeSlot) => (
     <button
   key={`${slot._id}-${timeSlot.startTime}`}
   type="button"

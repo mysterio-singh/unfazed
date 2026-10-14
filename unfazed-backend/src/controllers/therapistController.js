@@ -24,13 +24,19 @@ const getProfile = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   try {
-    const {
-      name,
-      bio,
-      specializations,
-      languages,
-      slug,
-    } = req.body;
+    
+const {
+  name,
+  bio,
+  specializations,
+  languages,
+  slug,
+  qualifications,
+  certifications,
+  experienceYears,
+  professionalApproach,
+} = req.body;
+
 
     const therapist = await Therapist.findById(req.therapistId);
 
@@ -65,6 +71,39 @@ const updateProfile = async (req, res, next) => {
     if (languages !== undefined) {
       therapist.languages = languages;
     }
+    
+if (qualifications !== undefined) {
+  therapist.qualifications = qualifications;
+}
+
+if (certifications !== undefined) {
+  therapist.certifications = certifications;
+}
+
+if (experienceYears !== undefined) {
+  const experience = Number(experienceYears);
+
+  if (
+    experienceYears === "" ||
+    experienceYears === null
+  ) {
+    therapist.experienceYears = null;
+  } else if (
+    !Number.isFinite(experience) ||
+    experience < 0
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Experience must be a valid non-negative number",
+    });
+  } else {
+    therapist.experienceYears = experience;
+  }
+}
+
+if (professionalApproach !== undefined) {
+  therapist.professionalApproach = professionalApproach;
+}
 
     await therapist.save();
 
@@ -79,19 +118,30 @@ const updateProfile = async (req, res, next) => {
         bio: therapist.bio,
         specializations: therapist.specializations,
         languages: therapist.languages,
+        
+qualifications: therapist.qualifications,
+certifications: therapist.certifications,
+experienceYears: therapist.experienceYears,
+professionalApproach: therapist.professionalApproach,
+
       },
     });
   } catch (error) {
     next(error);
   }
 };
+
 const getPublicProfile = async (req, res, next) => {
   try {
     const { slug } = req.params;
 
-    const therapist = await Therapist.findOne({ slug })
-      .select("name slug bio specializations languages");
-console.log("XYZ PUBLIC PROFILE ID:", therapist?._id?.toString());
+    const therapist = await Therapist.findOne({
+      slug: { $eq: slug },
+      name: { $type: "string", $regex: /\S/ },
+    }).select(
+      "name slug bio specializations languages qualifications certifications experienceYears professionalApproach"
+    );
+
     if (!therapist) {
       return res.status(404).json({
         success: false,
@@ -109,8 +159,37 @@ console.log("XYZ PUBLIC PROFILE ID:", therapist?._id?.toString());
 };
 
 
+
+
+
+
+const getPublicTherapists = async (req, res, next) => {
+  try {
+    const therapists = await Therapist.find({
+      name: { $type: "string", $regex: /\S/ },
+      slug: { $type: "string", $regex: /\S/ },
+    })
+      .select(
+        "name slug bio specializations languages qualifications certifications experienceYears professionalApproach"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      count: therapists.length,
+      therapists,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
 module.exports = {
   getProfile,
   updateProfile,
   getPublicProfile,
+  getPublicTherapists,
 };

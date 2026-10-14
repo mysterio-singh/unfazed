@@ -117,19 +117,21 @@ const createPublicPaymentOrder = async (req, res, next) => {
   try {
     const { slug } = req.params;
 
-    const {
-      name,
-      email,
-      phone,
-      dateOfBirth,
-      gender,
-      presentingConcern,
-      startAt,
-      durationMinutes,
-      timezone,
-      consentGiven,
-      packageId,
-    } = req.body;
+
+const {
+  name,
+  email,
+  phone,
+  dateOfBirth,
+  gender,
+  presentingConcern,
+  startAt,
+  durationMinutes,
+  timezone,
+  consentGiven,
+  packageId,
+} = req.body;
+
 
     if (
       !name ||
@@ -198,12 +200,14 @@ const createPublicPaymentOrder = async (req, res, next) => {
       age--;
     }
 
-    if (age < 0 || age > 120) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide a valid date of birth",
-      });
-    }
+    
+if (age < 1 || age > 120) {
+  return res.status(400).json({
+    success: false,
+    message: "Client must be at least 1 year old.",
+  });
+}
+
 
     const start = new Date(startAt);
 

@@ -43,6 +43,28 @@ const therapistSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+  
+    qualifications: {
+      type: [String],
+      default: [],
+    },
+
+    certifications: {
+      type: [String],
+      default: [],
+    },
+
+    experienceYears: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    professionalApproach: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
     subscriptionTier: {
   type: mongoose.Schema.Types.ObjectId,

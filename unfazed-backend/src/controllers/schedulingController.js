@@ -1,6 +1,7 @@
 const Availability = require("../models/Availability");
 const Session = require("../models/Session");
 const mongoose = require("mongoose");
+const Therapist = require("../models/Therapist");
 
 const {
   getActiveClientPackage,
@@ -246,8 +247,36 @@ const createBooking = async (req, res, next) => {
         message: "Invalid start time",
       });
     }
+    
+    // Prevent booking a slot that has already started
+if (start <= new Date()) {
+  return res.status(409).json({
+    success: false,
+    message: "This time slot is no longer available",
+  });
+}
 
     const duration = Number(durationMinutes);
+
+    
+    // Verify that the therapist has a valid basic public profile.
+    const Therapist = require("../models/Therapist");
+
+    const eligibleTherapist = await Therapist.findOne({
+      _id: req.therapistId,
+      name: { $type: "string", $regex: /\S/ },
+      slug: { $type: "string", $regex: /\S/ },
+    })
+      .select("_id")
+      .lean();
+
+    if (!eligibleTherapist) {
+      return res.status(403).json({
+        success: false,
+        message: "This therapist is not eligible for booking",
+      });
+    }
+
 
     const end = new Date(
       start.getTime() + duration * 60 * 1000
@@ -413,25 +442,52 @@ const createBooking = async (req, res, next) => {
       Any existing session overlapping the requested
       interval will reject the booking.
     */
-    const overlappingSession = await Session.findOne({
-      therapist: req.therapistId,
-      status: {
-        $in: ["scheduled", "confirmed"],
-      },
-      startAt: {
-        $lt: end,
-      },
-      endAt: {
-        $gt: start,
-      },
-    });
+    
+const activeSessions = await Session.find({
+  therapist: req.therapistId,
+  status: {
+    $in: ["scheduled", "confirmed"],
+  },
+  startAt: {
+    $lt: end,
+  },
+  endAt: {
+    $gt: new Date(start.getTime() - 24 * 60 * 60 * 1000),
+  },
+});
 
-    if (overlappingSession) {
-      return res.status(409).json({
-        success: false,
-        message: "This time slot is already booked",
-      });
-    }
+// Use the buffer configured for the selected availability slot.
+const selectedAvailability = availableSlots.find((slot) => {
+  const slotStart = timeToMinutes(slot.startTime);
+  const slotEnd = timeToMinutes(slot.endTime);
+
+  return (
+    requestedStartMinutes >= slotStart &&
+    requestedEndMinutes <= slotEnd - (Number(slot.bufferMinutes) || 0)
+  );
+});
+
+const bufferMinutes = Number(selectedAvailability?.bufferMinutes) || 0;
+
+const hasBufferConflict = activeSessions.some((session) => {
+  const bufferedStart = new Date(
+    start.getTime() - bufferMinutes * 60 * 1000
+  );
+
+  const bufferedEnd = new Date(
+    end.getTime() + bufferMinutes * 60 * 1000
+  );
+
+  return session.startAt < bufferedEnd && session.endAt > bufferedStart;
+});
+
+if (hasBufferConflict) {
+  return res.status(409).json({
+    success: false,
+    message: "This time slot conflicts with an existing session or buffer time",
+  });
+}
+
 
     /*
       Create the booking and consume the package
@@ -441,7 +497,15 @@ const createBooking = async (req, res, next) => {
 
     try {
       dbSession.startTransaction();
+const lockResult = await Therapist.updateOne(
+  { _id: req.therapistId },
+  { $inc: { __v: 1 } },
+  { session: dbSession }
+);
 
+if (lockResult.matchedCount !== 1) {
+  throw new Error("Unable to lock therapist for booking");
+}
       const [session] = await Session.create(
         [
           {

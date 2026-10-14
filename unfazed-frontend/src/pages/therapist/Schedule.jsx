@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../../context/AuthContext";
 
 const days = [
-  { value: 0, label: "Sunday" },
+  
   { value: 1, label: "Monday" },
   { value: 2, label: "Tuesday" },
   { value: 3, label: "Wednesday" },
@@ -14,8 +15,14 @@ const days = [
 
 function Schedule() {
   const { token } = useAuth();
+  const location = useLocation();
+
+  const filter = new URLSearchParams(location.search).get("filter");
 
   const [availability, setAvailability] = useState([]);
+  const [sessions, setSessions] = useState([]);
+const [sessionsLoading, setSessionsLoading] = useState(true);
+const [sessionsError, setSessionsError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -58,12 +65,37 @@ function Schedule() {
       setLoading(false);
     }
   };
+  
+  
+const fetchSessions = async () => {
+  try {
+    setSessionsLoading(true);
+    setSessionsError("");
+
+    const response = await axiosInstance.get("/scheduling/sessions", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.data.success) {
+      setSessions(response.data.data || []);
+    }
+  } catch (err) {
+    setSessionsError(
+      err.response?.data?.message || "Failed to load sessions"
+    );
+  } finally {
+    setSessionsLoading(false);
+  }
+};
 
   useEffect(() => {
-    if (token) {
-      fetchAvailability();
-    }
-  }, [token]);
+  if (token) {
+    fetchAvailability();
+    fetchSessions();
+  }
+}, [token]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -151,6 +183,30 @@ function Schedule() {
     }
   };
 
+  
+const now = new Date();
+
+
+const filteredSessions = sessions.filter((session) => {
+  const sessionDate = new Date(session.startAt);
+
+  // Hide cancelled sessions
+  if (session.status === "cancelled") {
+    return false;
+  }
+
+  if (filter === "today") {
+    return sessionDate.toDateString() === now.toDateString();
+  }
+
+  if (filter === "upcoming") {
+    return sessionDate > now;
+  }
+
+  return true;
+});
+
+
   const getDayName = (dayNumber) => {
     return (
       days.find((day) => day.value === dayNumber)?.label ||
@@ -183,6 +239,45 @@ function Schedule() {
             {error}
           </div>
         )}
+
+
+{filter && (
+  <div className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <h2 className="text-xl font-semibold">
+      {filter === "today" ? "Today's Sessions" : "Upcoming Sessions"}
+    </h2>
+
+    {sessionsLoading ? (
+      <p className="mt-4 text-slate-400">Loading sessions...</p>
+    ) : sessionsError ? (
+      <p className="mt-4 text-red-400">{sessionsError}</p>
+    ) : filteredSessions.length === 0 ? (
+      <p className="mt-4 text-slate-400">No sessions found.</p>
+    ) : (
+      <div className="mt-4 space-y-3">
+        {filteredSessions.map((session) => (
+          <div
+            key={session._id}
+            className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+          >
+            <p className="font-medium">
+              {session.client?.name || "Client"}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">
+              {new Date(session.startAt).toLocaleString("en-IN", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">
+              Status: {session.status}
+            </p>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Add Availability */}
@@ -224,7 +319,31 @@ function Schedule() {
     </option>
   </select>
 </div>
-     {form.type !== "weekly" && (
+
+{/* Day - only for weekly availability */}
+{form.type === "weekly" && (
+  <div>
+    <label className="mb-2 block text-sm text-slate-300">
+      Day
+    </label>
+
+    <select
+      name="dayOfWeek"
+      value={form.dayOfWeek}
+      onChange={handleChange}
+      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+    >
+      {days.map((day) => (
+        <option key={day.value} value={day.value}>
+          {day.label}
+        </option>
+      ))}
+    </select>
+  </div>
+)}
+
+{/* Date - for override and blocked slots */}
+{form.type !== "weekly" && (
   <div>
     <label className="mb-2 block text-sm text-slate-300">
       Date

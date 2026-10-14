@@ -16,6 +16,7 @@ import ClientDetails from "../pages/therapist/ClientDetails";
 import Notes from "../pages/therapist/Notes";
 import ClientPortal from "../pages/client/ClientPortal";
 import Analytics from "../pages/therapist/Analytics";
+import TherapistDirectory from "../pages/client/TherapistDirectory";
 function AppRoutes() {
   return (
     <BrowserRouter>
@@ -95,6 +96,11 @@ function AppRoutes() {
 <Route
   path="/client-portal"
   element={<ClientPortal />}
+/>
+
+<Route
+  path="/therapists"
+  element={<TherapistDirectory />}
 />
 
           <Route
